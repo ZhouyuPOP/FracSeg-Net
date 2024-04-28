@@ -30,7 +30,7 @@ class RandomCrop(object):
         # classify the voxel by class
         propose_center = [np.argwhere(seg == i) for i in range(num_cls)]
         # choose the center point in different probability 'p'
-        class_id = np.random.choice(num_cls, size=1, replace=True, p=[0.1, 0.15, 0.3, 0.15, 0.3])
+        class_id = np.random.choice(num_cls, size=1, replace=True)
         center = propose_center[int(class_id)][random.randrange(len(propose_center[int(class_id)]))]
         # cal the upper left point
         d1 = center[0] - int(self.CropSize[0] / 2 - 1)
