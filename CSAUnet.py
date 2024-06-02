@@ -23,8 +23,8 @@ class CsaUnet(nn.Module):
         ])
 
         self.attentions = nn.ModuleList([
-            AttentionBlock(4 * init_channel_number, 8 * init_channel_number, 4 * init_channel_number),
-            AttentionBlock(2 * init_channel_number, 4 * init_channel_number, 2 * init_channel_number),
+            AttentionBlock(4 * init_channel_number, 8 * init_channel_number, init_channel_number),
+            AttentionBlock(2 * init_channel_number, 4 * init_channel_number, init_channel_number),
             None
         ])
         # 1×1×1 convolution reduces the number of output channels to the number of class
@@ -112,10 +112,12 @@ class DoubleConv(nn.Sequential):
 class AttentionBlock(nn.Module):
     def __init__(self, channel_l, channel_g, init_channel=64):
         super(AttentionBlock, self).__init__()
-        self.W_x1 = nn.Conv3d(channel_l, channel_l, kernel_size=1)  # Encoder路径的第一层特征图
-        self.W_x2 = nn.Conv3d(channel_l, channel_g, kernel_size=int(channel_g/channel_l))  # Encoder路径的任意层特征图
-        self.W_g1 = nn.Conv3d(init_channel, channel_l, kernel_size=int(channel_l/init_channel))  # 第一次Attention的另一个输入
-        self.W_g2 = nn.Conv3d(channel_g, channel_g, kernel_size=1)  # 第二次Attention的另一个输入
+        self.W_x1 = nn.Conv3d(channel_l, channel_l, kernel_size=1)
+        self.W_x2 = nn.Conv3d(channel_l, channel_g, kernel_size=int(channel_g/channel_l),
+                              stride=int(channel_g/channel_l), padding=(channel_g//channel_l//2)-1)
+        self.W_g1 = nn.Conv3d(init_channel, channel_l, kernel_size=int(channel_l/init_channel),
+                              stride=int(channel_l/init_channel), padding=(channel_l//init_channel//2)-1)
+        self.W_g2 = nn.Conv3d(channel_g, channel_g, kernel_size=1)
         self.relu = nn.ReLU()
         self.psi1 = nn.Conv3d(channel_l, out_channels=1, kernel_size=1)
         self.psi2 = nn.Conv3d(channel_g, out_channels=1, kernel_size=1)
@@ -125,13 +127,13 @@ class AttentionBlock(nn.Module):
         # First Attention Operation
         first_layer_afterconv = self.W_g1(first_layer_f)
         xl_afterconv = self.W_x1(x_l)
-        att_map_first = self.sig(self.psi(self.relu(first_layer_afterconv + xl_afterconv)))
+        att_map_first = self.sig(self.psi1(self.relu(first_layer_afterconv + xl_afterconv)))
         xl_after_first_att = x_l * att_map_first
 
         # Second Attention Operation
         xg_afterconv = self.W_g2(x_g)
         xl_after_first_att_and_conv = self.W_x2(xl_after_first_att)
-        att_map_second = self.sig(self.psi(self.relu(xg_afterconv + xl_after_first_att_and_conv)))
+        att_map_second = self.sig(self.psi2(self.relu(xg_afterconv + xl_after_first_att_and_conv)))
         att_map_second_upsample = F.upsample(att_map_second, size=x_l.size()[2:], mode='trilinear')
         out = xl_after_first_att * att_map_second_upsample
         return out
